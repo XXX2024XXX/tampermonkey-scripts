@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         F5 5回更新テスト
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.2
+// @version      1.3
 // @description  GitHub Actionsによるバージョン・対象URL・CHANGELOGの自動同期を確認します。
 // @loader-enabled true
 // @match        http://*/*

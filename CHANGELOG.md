@@ -3,6 +3,9 @@
 Tampermonkeyスクリプトの更新履歴です。
 
 <!-- AUTO-CHANGELOG: 自動更新はこの行の下へ追加されます -->
+## 2026-08-05 22:30 JST
+- `scripts/f5-five-step-test.user.js`: `1.2` → `1.3`
+
 ## 2026-08-05 20:35 JST
 - `scripts/tampermonkey-copyless-manager.user.js`: `1.0` → `1.1`
 
