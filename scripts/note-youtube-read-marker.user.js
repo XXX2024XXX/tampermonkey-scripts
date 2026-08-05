@@ -42,8 +42,7 @@
         readMemo: 'rm196-read-memo',
         input: 'rm196-input',
         save: 'rm196-save',
-        notice: 'rm196-notice',
-        githubBadge: 'rm196-github-badge'
+        notice: 'rm196-notice'
     };
 
     let lastUrl = location.href;
@@ -355,20 +354,6 @@
                 font-weight:900!important;
                 cursor:pointer!important;
                 box-sizing:border-box!important
-            }
-            #${ID.githubBadge}{
-                position:fixed!important;
-                right:8px!important;
-                bottom:8px!important;
-                z-index:2147483646!important;
-                padding:3px 6px!important;
-                border:1px solid #777!important;
-                border-radius:5px!important;
-                background:rgba(255,255,255,.92)!important;
-                color:#555!important;
-                font-size:10px!important;
-                font-family:Arial,sans-serif!important;
-                pointer-events:none!important
             }
             #${ID.notice}{
                 position:fixed!important;
@@ -719,22 +704,9 @@
         savePanelState();
     });
 
-    const ensureGithubBadge = () => {
-        let badge = document.getElementById(ID.githubBadge);
-
-        if (!badge) {
-            badge = document.createElement('div');
-            badge.id = ID.githubBadge;
-            (document.body || document.documentElement).appendChild(badge);
-        }
-
-        badge.textContent = `GitHub版 v${VERSION}`;
-    };
-
     const refresh = () => {
         addStyles();
         ensurePanel();
-        ensureGithubBadge();
     };
 
     const scheduleRefresh = (delay = 120) => {
