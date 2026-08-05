@@ -1,8 +1,8 @@
 ﻿// ==UserScript==
 // @name         ChatGPT 作成ファイル自動ダウンロード
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.0.7
-// @description  ChatGPTが新しく作成したダウンロード可能なファイルだけを検知し、ファイル名を表示して自動で1回だけダウンロードします。
+// @version      1.0.8
+// @description  ChatGPTが新しく作成したダウンロード可能なファイルだけを検知し、ファイル名と種類を表示して自動で1回だけダウンロードします。
 // @author       XXX2024XXX
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const VERSION = '1.0.6';
+    const VERSION = '1.0.8';
     const DOWNLOAD_DELAY_MS = 900;
     const FILE_EXTENSION_PATTERN = /\.(?:zip|7z|rar|pdf|docx?|xlsx?|xlsm|pptx?|csv|tsv|txt|md|json|xml|ya?ml|js|mjs|cjs|ts|tsx|jsx|html?|css|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bat|cmd|ps1|ahk|user\.js|png|jpe?g|webp|gif|svg|mp3|wav|m4a|mp4|webm)(?:[?#]|$)/i;
     const EXACT_FILE_URL_PATTERN = /(?:sandbox:\/\/mnt\/data\/|\/mnt\/data\/|\/backend-api\/files\/|files\.oaiusercontent\.com\/)/i;
@@ -66,6 +66,16 @@
         if (hrefName && FILE_EXTENSION_PATTERN.test(hrefName)) return decodeFileName(hrefName);
 
         return text || 'ChatGPT作成ファイル';
+    }
+
+    function formatDetectedName(fileName) {
+        const cleanName = normalize(fileName);
+        const match = cleanName.match(/^(.*?)(?:\.([a-z0-9]+))$/i);
+        if (!match) return cleanName;
+
+        const baseName = normalize(match[1]) || 'ファイル';
+        const extension = match[2].toUpperCase();
+        return `${baseName} ${extension}`;
     }
 
     function isRealGeneratedFileLink(element) {
@@ -136,7 +146,7 @@
         }, 4000);
     }
 
-    function showDetectedPopup(fileName) {
+    function showDetectedPopup(displayName) {
         document.getElementById('cgpt-auto-file-popup')?.remove();
 
         const popup = document.createElement('div');
@@ -161,7 +171,7 @@
             'box-shadow:0 14px 45px rgba(0,0,0,.38)'
         ].join(';');
 
-        popup.textContent = `${fileName} を検知しました`;
+        popup.textContent = `${displayName} を検知しました`;
         document.body.append(popup);
 
         clearTimeout(popup._hideTimer);
@@ -184,13 +194,14 @@
                     queuedFiles.delete(key);
 
                     const fileName = getDownloadName(link).slice(0, 180);
-                    showDetectedPopup(fileName);
-                    showStatus(`${fileName} を検知しました`);
+                    const displayName = formatDetectedName(fileName);
+                    showDetectedPopup(displayName);
+                    showStatus(`${displayName} を検知しました`);
 
                     try {
                         GM_notification({
                             title: 'ChatGPT ファイル検知',
-                            text: `${fileName} を検知しました`,
+                            text: `${displayName} を検知しました`,
                             timeout: 3000,
                             silent: true
                         });
