@@ -1,7 +1,7 @@
-// ==UserScript==
+﻿// ==UserScript==
 // @name         Sample Userscript
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.1
+// @version      1.2
 // @description  Tampermonkey自動更新確認用のサンプルスクリプト
 // @match        https://example.com/*
 // @grant        none
