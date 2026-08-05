@@ -19,6 +19,32 @@ async function showStatus() {
     document.getElementById('message').textContent = status.message || '-';
 }
 
+async function runNow() {
+    const button = document.getElementById('runNow');
+    button.disabled = true;
+    button.textContent = '実行中…';
+
+    try {
+        const result = await chrome.runtime.sendMessage({ type: 'RUN_NOW' });
+
+        if (!result?.ok) {
+            throw new Error(result?.message || '実行に失敗しました。');
+        }
+
+        await showStatus();
+        button.textContent = '実行成功';
+    } catch (error) {
+        document.getElementById('status').textContent = 'エラー';
+        document.getElementById('status').className = 'error';
+        document.getElementById('message').textContent = error.message;
+        button.textContent = '再テスト';
+    } finally {
+        button.disabled = false;
+    }
+}
+
+document.getElementById('runNow').addEventListener('click', runNow);
+
 showStatus().catch((error) => {
     const statusElement = document.getElementById('status');
     statusElement.textContent = '表示エラー';
