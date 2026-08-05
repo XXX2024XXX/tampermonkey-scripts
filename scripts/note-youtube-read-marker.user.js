@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         note・YouTube 既読未読切替＋一言メモ
 // @namespace    local.note.youtube.read.marker
-// @version      1.9.7
+// @version      1.9.8
 // @description  note記事とYouTube動画を手動で既読・未読に切り替え、一言メモを保存します。操作パネルは移動・最小化・位置保存に対応します。
 // @author       You
 // @match        https://note.com/*

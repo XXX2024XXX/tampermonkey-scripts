@@ -3,6 +3,9 @@
 Tampermonkeyスクリプトの更新履歴です。
 
 <!-- AUTO-CHANGELOG: 自動更新はこの行の下へ追加されます -->
+## 2026-08-05 17:36 JST
+- `scripts/note-youtube-read-marker.user.js`: `1.9.7` → `1.9.8`
+
 ## 2026-08-05 17:22 JST
 - `scripts/sample.user.js`: `1.2` → `1.3`
 
