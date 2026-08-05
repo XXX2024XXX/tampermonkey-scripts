@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         OK表示テスト
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.3
+// @version      1.4
 // @description  GitHub更新とTampermonkey自動更新の確認用に、画面右上へ更新テスト結果を表示します。
 // @match        http://*/*
 // @match        https://*/*
@@ -14,7 +14,7 @@
     'use strict';
 
     const notice = document.createElement('div');
-    notice.textContent = '更新テスト1：v1.2';
+    notice.textContent = '更新テスト2：v1.4';
     notice.style.cssText = [
         'position:fixed',
         'top:16px',
