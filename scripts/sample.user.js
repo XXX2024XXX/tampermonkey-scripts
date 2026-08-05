@@ -12,8 +12,12 @@
 (() => {
     'use strict';
 
+    const version = typeof GM_info !== 'undefined' && GM_info.script
+        ? GM_info.script.version
+        : '不明';
+
     const notice = document.createElement('div');
-    notice.textContent = 'Tampermonkey 自動更新テスト：バージョン 1.1';
+    notice.textContent = `Tampermonkey 自動更新テスト：バージョン ${version}`;
     notice.style.cssText = [
         'position:fixed',
         'top:16px',
@@ -30,5 +34,5 @@
     ].join(';');
 
     document.documentElement.appendChild(notice);
-    console.log('[Sample Userscript] version 1.1');
+    console.log(`[Sample Userscript] version ${version}`);
 })();
