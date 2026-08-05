@@ -1,8 +1,8 @@
 ﻿// ==UserScript==
 // @name         ChatGPT 作成ファイル自動ダウンロード
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.0.5
-// @description  ChatGPTが新しく作成したダウンロード可能なファイルだけを検知し、自動で1回だけダウンロードします。
+// @version      1.0.6
+// @description  ChatGPTが新しく作成したダウンロード可能なファイルだけを検知し、ファイル名を表示して自動で1回だけダウンロードします。
 // @author       XXX2024XXX
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const VERSION = '1.0.5';
+    const VERSION = '1.0.6';
     const DOWNLOAD_DELAY_MS = 900;
     const FILE_EXTENSION_PATTERN = /\.(?:zip|7z|rar|pdf|docx?|xlsx?|xlsm|pptx?|csv|tsv|txt|md|json|xml|ya?ml|js|mjs|cjs|ts|tsx|jsx|html?|css|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bat|cmd|ps1|ahk|user\.js|png|jpe?g|webp|gif|svg|mp3|wav|m4a|mp4|webm)(?:[?#]|$)/i;
     const EXACT_FILE_URL_PATTERN = /(?:sandbox:\/\/mnt\/data\/|\/mnt\/data\/|\/backend-api\/files\/|files\.oaiusercontent\.com\/)/i;
@@ -36,7 +36,7 @@
 
     function isExcluded(element) {
         return Boolean(element.closest(
-            'nav, aside, header, form, textarea, [contenteditable="true"], [data-testid="composer"], #cgpt-auto-file-status'
+            'nav, aside, header, form, textarea, [contenteditable="true"], [data-testid="composer"], #cgpt-auto-file-status, #cgpt-auto-file-popup'
         ));
     }
 
@@ -44,13 +44,28 @@
         return normalize(element.getAttribute('href') || element.href || '');
     }
 
+    function decodeFileName(value) {
+        try {
+            return decodeURIComponent(value);
+        } catch (_) {
+            return value;
+        }
+    }
+
     function getDownloadName(element) {
-        return normalize(
-            element.getAttribute('download') ||
-            element.textContent ||
-            element.getAttribute('aria-label') ||
-            'ChatGPT作成ファイル'
-        );
+        const downloadName = normalize(element.getAttribute('download') || '');
+        if (downloadName) return decodeFileName(downloadName);
+
+        const text = normalize(element.textContent || '');
+        const textMatch = text.match(/[^\\/:*?"<>|]+\.(?:zip|7z|rar|pdf|docx?|xlsx?|xlsm|pptx?|csv|tsv|txt|md|json|xml|ya?ml|js|mjs|cjs|ts|tsx|jsx|html?|css|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bat|cmd|ps1|ahk|user\.js|png|jpe?g|webp|gif|svg|mp3|wav|m4a|mp4|webm)/i);
+        if (textMatch) return decodeFileName(textMatch[0]);
+
+        const href = getHref(element);
+        const cleanHref = href.split('#')[0].split('?')[0];
+        const hrefName = cleanHref.substring(cleanHref.lastIndexOf('/') + 1);
+        if (hrefName && FILE_EXTENSION_PATTERN.test(hrefName)) return decodeFileName(hrefName);
+
+        return text || 'ChatGPT作成ファイル';
     }
 
     function isRealGeneratedFileLink(element) {
@@ -101,7 +116,7 @@
                 'right:14px',
                 'bottom:14px',
                 'z-index:2147483647',
-                'max-width:360px',
+                'max-width:420px',
                 'padding:10px 14px',
                 'border-radius:10px',
                 'color:#fff',
@@ -118,7 +133,39 @@
         clearTimeout(status._hideTimer);
         status._hideTimer = setTimeout(() => {
             status.style.opacity = '0';
-        }, 3500);
+        }, 4000);
+    }
+
+    function showDetectedPopup(fileName) {
+        document.getElementById('cgpt-auto-file-popup')?.remove();
+
+        const popup = document.createElement('div');
+        popup.id = 'cgpt-auto-file-popup';
+        popup.style.cssText = [
+            'position:fixed',
+            'left:50%',
+            'top:50%',
+            'transform:translate(-50%,-50%)',
+            'z-index:2147483647',
+            'width:min(520px,calc(100vw - 40px))',
+            'padding:24px',
+            'border-radius:14px',
+            'background:#fff',
+            'color:#111',
+            'font-family:system-ui,sans-serif',
+            'font-size:18px',
+            'font-weight:800',
+            'line-height:1.55',
+            'text-align:center',
+            'word-break:break-all',
+            'box-shadow:0 14px 45px rgba(0,0,0,.38)'
+        ].join(';');
+
+        popup.textContent = `${fileName} を検知しました`;
+        document.body.append(popup);
+
+        clearTimeout(popup._hideTimer);
+        popup._hideTimer = setTimeout(() => popup.remove(), 3000);
     }
 
     function clickFileLink(link) {
@@ -136,6 +183,20 @@
                     knownFiles.add(key);
                     queuedFiles.delete(key);
 
+                    const fileName = getDownloadName(link).slice(0, 180);
+                    showDetectedPopup(fileName);
+                    showStatus(`${fileName} を検知しました`);
+
+                    try {
+                        GM_notification({
+                            title: 'ChatGPT ファイル検知',
+                            text: `${fileName} を検知しました`,
+                            timeout: 3000,
+                            silent: true
+                        });
+                    } catch (_) {
+                    }
+
                     link.dispatchEvent(new MouseEvent('mousedown', {
                         bubbles: true,
                         cancelable: true,
@@ -147,19 +208,6 @@
                         view: window
                     }));
                     link.click();
-
-                    const fileName = getDownloadName(link).slice(0, 120);
-                    showStatus(`自動ダウンロード：${fileName}`);
-
-                    try {
-                        GM_notification({
-                            title: 'ChatGPT 自動ダウンロード',
-                            text: `${fileName} を検知してダウンロードしました`,
-                            timeout: 3000,
-                            silent: true
-                        });
-                    } catch (_) {
-                    }
                 } catch (error) {
                     knownFiles.delete(key);
                     queuedFiles.delete(key);
