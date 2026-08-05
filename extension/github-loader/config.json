@@ -3,13 +3,23 @@
   "emergencyStop": false,
   "cacheHistoryLimit": 3,
   "requestTimeoutMs": 15000,
-  "generatedAt": "2026-08-05T10:57:35.546Z",
+  "generatedAt": "2026-08-05T11:09:08.769Z",
   "scripts": [
     {
       "id": "ok-test",
       "name": "OK表示テスト",
       "enabled": true,
       "sourceUrl": "https://raw.githubusercontent.com/XXX2024XXX/tampermonkey-scripts/main/scripts/ok-test.user.js",
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    },
+    {
+      "id": "page-title-url-copy",
+      "name": "ページタイトル＋URLコピー（F8）",
+      "enabled": true,
+      "sourceUrl": "https://raw.githubusercontent.com/XXX2024XXX/tampermonkey-scripts/main/scripts/page-title-url-copy.user.js",
       "matches": [
         "http://*/*",
         "https://*/*"
