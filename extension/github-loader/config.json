@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "emergencyStop": false,
+  "cacheHistoryLimit": 3,
+  "requestTimeoutMs": 15000,
+  "scripts": []
+}
