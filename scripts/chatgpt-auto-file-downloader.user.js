@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         ChatGPT 作成ファイル自動ダウンロード
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.0.0
+// @version      1.0.1
 // @description  ChatGPTの回答に新しく表示されたダウンロード可能なファイルを検知し、自動で1回だけダウンロードします。
 // @author       XXX2024XXX
 // @match        https://chatgpt.com/*
