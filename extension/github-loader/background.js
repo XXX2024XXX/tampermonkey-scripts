@@ -29,15 +29,9 @@ async function fetchText(url, timeoutMs) {
             signal: controller.signal
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const text = await response.text();
-        if (!text.trim()) {
-            throw new Error('取得内容が空です。');
-        }
-
+        if (!text.trim()) throw new Error('取得内容が空です。');
         return text;
     } finally {
         clearTimeout(timeoutId);
@@ -45,13 +39,8 @@ async function fetchText(url, timeoutMs) {
 }
 
 function validateConfig(config) {
-    if (!config || typeof config !== 'object') {
-        throw new Error('config.jsonの形式が不正です。');
-    }
-
-    if (!Array.isArray(config.scripts)) {
-        throw new Error('config.jsonのscriptsが配列ではありません。');
-    }
+    if (!config || typeof config !== 'object') throw new Error('config.jsonの形式が不正です。');
+    if (!Array.isArray(config.scripts)) throw new Error('config.jsonのscriptsが配列ではありません。');
 
     return {
         schemaVersion: Number(config.schemaVersion || 1),
@@ -71,25 +60,17 @@ async function loadConfig() {
     } catch (error) {
         const stored = await chrome.storage.local.get(CONFIG_CACHE_KEY);
         const cached = stored[CONFIG_CACHE_KEY];
-
-        if (!cached) {
-            throw new Error(`設定取得失敗: ${error.message}`);
-        }
-
+        if (!cached) throw new Error(`設定取得失敗: ${error.message}`);
         return { config: validateConfig(cached), source: '前回設定' };
     }
 }
 
 function urlMatches(url, patterns) {
-    if (!Array.isArray(patterns) || patterns.length === 0) {
-        return false;
-    }
+    if (!Array.isArray(patterns) || patterns.length === 0) return false;
 
     return patterns.some((pattern) => {
         try {
-            const escaped = pattern
-                .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-                .replace(/\*/g, '.*');
+            const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
             return new RegExp(`^${escaped}$`, 'i').test(url);
         } catch {
             return false;
@@ -98,13 +79,8 @@ function urlMatches(url, patterns) {
 }
 
 function validateScriptEntry(entry) {
-    if (!entry || typeof entry !== 'object') {
-        return null;
-    }
-
-    if (entry.enabled !== true || !entry.id || !entry.sourceUrl) {
-        return null;
-    }
+    if (!entry || typeof entry !== 'object') return null;
+    if (entry.enabled !== true || !entry.id || !entry.sourceUrl) return null;
 
     return {
         id: String(entry.id),
@@ -122,11 +98,9 @@ async function getScriptCache() {
 async function saveScriptVersion(scriptId, versionData, historyLimit) {
     const cache = await getScriptCache();
     const history = Array.isArray(cache[scriptId]) ? cache[scriptId] : [];
-    const nextHistory = [versionData, ...history]
+    cache[scriptId] = [versionData, ...history]
         .filter((item, index, array) => array.findIndex((candidate) => candidate.code === item.code) === index)
         .slice(0, historyLimit);
-
-    cache[scriptId] = nextHistory;
     await chrome.storage.local.set({ [SCRIPT_CACHE_KEY]: cache });
 }
 
@@ -155,18 +129,11 @@ async function runScript(tabId, entry, config) {
     try {
         const code = await fetchText(entry.sourceUrl, config.requestTimeoutMs);
         await executeCode(tabId, code);
-        await saveScriptVersion(entry.id, {
-            code,
-            fetchedAt: nowIso(),
-            sourceUrl: entry.sourceUrl
-        }, config.cacheHistoryLimit);
-
+        await saveScriptVersion(entry.id, { code, fetchedAt: nowIso(), sourceUrl: entry.sourceUrl }, config.cacheHistoryLimit);
         return { id: entry.id, name: entry.name, ok: true, source: 'GitHub最新版' };
     } catch (error) {
         const cached = await getLatestCachedVersion(entry.id);
-        if (!cached?.code) {
-            return { id: entry.id, name: entry.name, ok: false, source: 'なし', error: error.message };
-        }
+        if (!cached?.code) return { id: entry.id, name: entry.name, ok: false, source: 'なし', error: error.message };
 
         try {
             await executeCode(tabId, cached.code);
@@ -181,26 +148,13 @@ async function handlePage(tabId, url) {
     const { config, source: configSource } = await loadConfig();
 
     if (config.emergencyStop) {
-        await saveStatus({
-            ok: true,
-            state: 'stopped',
-            configSource,
-            url,
-            message: '緊急停止中のため実行しませんでした。',
-            results: []
-        });
+        await saveStatus({ ok: true, state: 'stopped', configSource, url, message: '緊急停止中のため実行しませんでした。', results: [] });
         return;
     }
 
-    const targets = config.scripts
-        .map(validateScriptEntry)
-        .filter(Boolean)
-        .filter((entry) => urlMatches(url, entry.matches));
-
+    const targets = config.scripts.map(validateScriptEntry).filter(Boolean).filter((entry) => urlMatches(url, entry.matches));
     const results = [];
-    for (const entry of targets) {
-        results.push(await runScript(tabId, entry, config));
-    }
+    for (const entry of targets) results.push(await runScript(tabId, entry, config));
 
     await saveStatus({
         ok: results.every((result) => result.ok),
@@ -213,26 +167,20 @@ async function handlePage(tabId, url) {
 }
 
 chrome.webNavigation.onCommitted.addListener((details) => {
-    if (details.frameId !== 0 || !/^https?:\/\//i.test(details.url)) {
-        return;
-    }
+    if (details.frameId !== 0 || !/^https?:\/\//i.test(details.url)) return;
+    handlePage(details.tabId, details.url).catch((error) => saveStatus({ ok: false, state: 'error', url: details.url, message: error.message, results: [] }));
+});
 
-    handlePage(details.tabId, details.url).catch(async (error) => {
-        await saveStatus({
-            ok: false,
-            state: 'error',
-            url: details.url,
-            message: error.message,
-            results: []
-        });
-    });
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type !== 'RUN_NOW') return;
+
+    handlePage(Number(message.tabId), String(message.url || ''))
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
+
+    return true;
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-    saveStatus({
-        ok: true,
-        state: 'installed',
-        message: '本番ローダー基盤を初期化しました。',
-        results: []
-    });
+    saveStatus({ ok: true, state: 'installed', message: '本番ローダーを初期化しました。', results: [] });
 });
