@@ -1,8 +1,8 @@
 ﻿// ==UserScript==
 // @name         F5 5回更新テスト
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.0
-// @description  同じページでF5するたびに1から5まで増える数字を表示し、GitHubローダーの更新動作を確認します。
+// @version      1.1
+// @description  同じページでF5するたびに1から5まで増える数字を表示し、Tampermonkeyへの自動反映を確認します。
 // @loader-enabled true
 // @match        http://*/*
 // @match        https://*/*
@@ -47,7 +47,7 @@
     ].join(';');
 
     const title = document.createElement('div');
-    title.textContent = 'F5 更新テスト';
+    title.textContent = 'F5 更新テスト v1.1';
     title.style.cssText = 'font-size:16px;font-weight:900;margin-bottom:6px';
 
     const number = document.createElement('div');
