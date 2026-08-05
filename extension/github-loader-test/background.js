@@ -84,6 +84,7 @@ async function loadAndExecute(tabId) {
             version: latest.version,
             message: '最新版を取得して実行しました。'
         });
+        return { ok: true };
     } catch (latestError) {
         const stored = await chrome.storage.local.get(CACHE_KEY);
         const cached = stored[CACHE_KEY];
@@ -95,7 +96,7 @@ async function loadAndExecute(tabId) {
                 version: '不明',
                 message: latestError.message
             });
-            return;
+            return { ok: false, message: latestError.message };
         }
 
         try {
@@ -106,6 +107,7 @@ async function loadAndExecute(tabId) {
                 version: cached.version || '不明',
                 message: `GitHub取得失敗のため前回版を実行しました。${latestError.message}`
             });
+            return { ok: true };
         } catch (cachedError) {
             await saveStatus({
                 ok: false,
@@ -113,6 +115,7 @@ async function loadAndExecute(tabId) {
                 version: cached.version || '不明',
                 message: cachedError.message
             });
+            return { ok: false, message: cachedError.message };
         }
     }
 }
@@ -125,11 +128,30 @@ chrome.webNavigation.onCommitted.addListener((details) => {
     loadAndExecute(details.tabId);
 });
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type !== 'RUN_NOW') {
+        return false;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true })
+        .then(([tab]) => {
+            if (!tab?.id || !/^https?:\/\//i.test(tab.url || '')) {
+                throw new Error('通常のWebページを開いてから実行してください。');
+            }
+
+            return loadAndExecute(tab.id);
+        })
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, message: error.message }));
+
+    return true;
+});
+
 chrome.runtime.onInstalled.addListener(() => {
     saveStatus({
         ok: true,
         source: '待機中',
         version: '未取得',
-        message: 'Webページを開くか再読み込みしてください。'
+        message: 'Webページを開くか「今すぐテスト」を押してください。'
     });
 });
