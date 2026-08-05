@@ -1,46 +1,40 @@
 ﻿// ==UserScript==
 // @name         ChatGPT 作成ファイル自動ダウンロード
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.0.11
-// @description  ChatGPTが新しく作成したダウンロード可能なファイルだけを検知し、ファイル名と種類を1行表示して自動で1回だけダウンロードします。
+// @version      1.0.12
+// @description  ChatGPTが新しく作成したファイルを回答ごとに1回だけ処理し、ダウンロード完了後にファイル名と種類を通知します。
 // @author       XXX2024XXX
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
 // @updateURL    https://raw.githubusercontent.com/XXX2024XXX/tampermonkey-scripts/main/scripts/chatgpt-auto-file-downloader.user.js
 // @downloadURL  https://raw.githubusercontent.com/XXX2024XXX/tampermonkey-scripts/main/scripts/chatgpt-auto-file-downloader.user.js
 // @run-at       document-idle
-// @grant        none
+// @grant        GM_download
+// @grant        GM_notification
+// @connect      chatgpt.com
+// @connect      chat.openai.com
+// @connect      files.oaiusercontent.com
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-    const DOWNLOAD_DELAY_MS = 900;
+    const VERSION = '1.0.12';
+    const RESPONSE_SETTLE_MS = 1400;
+    const DOWNLOAD_TIMEOUT_MS = 120000;
+    const POPUP_DURATION_MS = 4500;
     const FILE_EXTENSION_PATTERN = /\.(?:zip|7z|rar|pdf|docx?|xlsx?|xlsm|pptx?|csv|tsv|txt|md|json|xml|ya?ml|js|mjs|cjs|ts|tsx|jsx|html?|css|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bat|cmd|ps1|ahk|user\.js|png|jpe?g|webp|gif|svg|mp3|wav|m4a|mp4|webm)(?:[?#]|$)/i;
-    const EXACT_FILE_URL_PATTERN = /(?:sandbox:\/\/mnt\/data\/|\/mnt\/data\/|\/backend-api\/files\/|files\.oaiusercontent\.com\/)/i;
+    const FILE_NAME_PATTERN = /[^\\/:*?"<>|]+\.(?:zip|7z|rar|pdf|docx?|xlsx?|xlsm|pptx?|csv|tsv|txt|md|json|xml|ya?ml|js|mjs|cjs|ts|tsx|jsx|html?|css|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bat|cmd|ps1|ahk|user\.js|png|jpe?g|webp|gif|svg|mp3|wav|m4a|mp4|webm)/i;
+    const EXACT_FILE_URL_PATTERN = /(?:\/mnt\/data\/|\/backend-api\/files\/|files\.oaiusercontent\.com\/)/i;
 
-    const knownFiles = new Set();
-    const queuedFiles = new Set();
-    let downloadQueue = Promise.resolve();
+    const completedTurns = new Set();
+    const processingTurns = new Set();
+    const existingTurnFiles = new Map();
+    const settleTimers = new Map();
+    let fallbackTurnCounter = 0;
 
     function normalize(value) {
         return String(value || '').replace(/\s+/g, ' ').trim();
-    }
-
-    function isAssistantOutput(element) {
-        return Boolean(element.closest(
-            '[data-message-author-role="assistant"], article[data-testid^="conversation-turn-"], [data-testid="conversation-turn"]'
-        ));
-    }
-
-    function isExcluded(element) {
-        return Boolean(element.closest(
-            'nav, aside, header, form, textarea, [contenteditable="true"], [data-testid="composer"], #cgpt-auto-file-popup'
-        ));
-    }
-
-    function getHref(element) {
-        return normalize(element.getAttribute('href') || element.href || '');
     }
 
     function decodeFileName(value) {
@@ -51,18 +45,56 @@
         }
     }
 
-    function getDownloadName(element) {
-        const downloadName = normalize(element.getAttribute('download') || '');
+    function getAssistantTurn(element) {
+        return element.closest('[data-message-author-role="assistant"], article[data-testid^="conversation-turn-"], [data-testid="conversation-turn"]');
+    }
+
+    function isAssistantTurn(turn) {
+        if (!turn) return false;
+        if (turn.matches('[data-message-author-role="assistant"]')) return true;
+        return Boolean(turn.querySelector('[data-message-author-role="assistant"]'));
+    }
+
+    function isExcluded(element) {
+        return Boolean(element.closest('nav, aside, header, form, textarea, [contenteditable="true"], [data-testid="composer"], #cgpt-auto-file-popup'));
+    }
+
+    function getTurnKey(turn) {
+        if (!turn.dataset.cgptDownloadTurnKey) {
+            const testId = normalize(turn.getAttribute('data-testid') || '');
+            const messageId = normalize(turn.getAttribute('data-message-id') || turn.id || '');
+            fallbackTurnCounter += 1;
+            turn.dataset.cgptDownloadTurnKey = messageId || testId || `assistant-turn-${fallbackTurnCounter}`;
+        }
+        return turn.dataset.cgptDownloadTurnKey;
+    }
+
+    function getHref(link) {
+        const rawHref = normalize(link.getAttribute('href') || '');
+        if (!rawHref || rawHref.startsWith('javascript:')) return '';
+
+        try {
+            return new URL(rawHref, location.href).href;
+        } catch (_) {
+            return normalize(link.href || rawHref);
+        }
+    }
+
+    function getDownloadName(link) {
+        const downloadName = normalize(link.getAttribute('download') || '');
         if (downloadName) return decodeFileName(downloadName);
 
-        const text = normalize(element.textContent || '');
-        const textMatch = text.match(/[^\\/:*?"<>|]+\.(?:zip|7z|rar|pdf|docx?|xlsx?|xlsm|pptx?|csv|tsv|txt|md|json|xml|ya?ml|js|mjs|cjs|ts|tsx|jsx|html?|css|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bat|cmd|ps1|ahk|user\.js|png|jpe?g|webp|gif|svg|mp3|wav|m4a|mp4|webm)/i);
+        const text = normalize(link.textContent || '');
+        const textMatch = text.match(FILE_NAME_PATTERN);
         if (textMatch) return decodeFileName(textMatch[0]);
 
-        const href = getHref(element);
-        const cleanHref = href.split('#')[0].split('?')[0];
-        const hrefName = cleanHref.substring(cleanHref.lastIndexOf('/') + 1);
-        if (hrefName && FILE_EXTENSION_PATTERN.test(hrefName)) return decodeFileName(hrefName);
+        const href = getHref(link);
+        try {
+            const url = new URL(href);
+            const pathName = decodeFileName(url.pathname.split('/').pop() || '');
+            if (FILE_EXTENSION_PATTERN.test(pathName)) return pathName;
+        } catch (_) {
+        }
 
         return 'ChatGPT作成ファイル';
     }
@@ -77,140 +109,179 @@
         return `${baseName} ${extension}`;
     }
 
-    function isRealGeneratedFileLink(element) {
-        if (!(element instanceof HTMLAnchorElement)) return false;
-        if (!isAssistantOutput(element) || isExcluded(element)) return false;
+    function isGeneratedFileLink(link) {
+        if (!(link instanceof HTMLAnchorElement)) return false;
+        if (isExcluded(link)) return false;
 
-        const href = getHref(element);
-        const downloadName = normalize(element.getAttribute('download') || '');
-        const text = normalize(element.textContent || '');
+        const turn = getAssistantTurn(link);
+        if (!isAssistantTurn(turn)) return false;
 
-        if (!href || href.startsWith('javascript:')) return false;
+        const href = getHref(link);
+        const downloadName = normalize(link.getAttribute('download') || '');
+        const text = normalize(link.textContent || '');
 
-        const exactChatGptFileUrl = EXACT_FILE_URL_PATTERN.test(href);
-        const explicitDownloadFile = Boolean(downloadName) && FILE_EXTENSION_PATTERN.test(downloadName);
-        const sandboxTextLink = /sandbox:\/\/mnt\/data\//i.test(element.getAttribute('href') || '');
-        const generatedFileWithExtension = exactChatGptFileUrl && FILE_EXTENSION_PATTERN.test(`${href} ${text} ${downloadName}`);
+        if (!href) return false;
 
-        return exactChatGptFileUrl || explicitDownloadFile || sandboxTextLink || generatedFileWithExtension;
+        const exactFileUrl = EXACT_FILE_URL_PATTERN.test(href);
+        const explicitDownload = Boolean(downloadName) && FILE_EXTENSION_PATTERN.test(downloadName);
+        const namedFile = FILE_EXTENSION_PATTERN.test(`${href} ${text} ${downloadName}`);
+
+        return explicitDownload || (exactFileUrl && namedFile);
     }
 
-    function getFileKey(element) {
-        return `${getHref(element)}|${normalize(element.getAttribute('download') || '')}|${normalize(element.textContent || '')}`;
-    }
+    function collectTurnLinks(turn) {
+        const unique = new Map();
 
-    function collectFileLinks(root = document) {
-        const links = [];
-
-        if (root instanceof HTMLAnchorElement && isRealGeneratedFileLink(root)) {
-            links.push(root);
+        for (const link of turn.querySelectorAll('a[href], a[download]')) {
+            if (!isGeneratedFileLink(link)) continue;
+            const href = getHref(link);
+            const fileName = getDownloadName(link);
+            unique.set(`${href}|${fileName}`, { link, href, fileName });
         }
 
-        if (root.querySelectorAll) {
-            for (const link of root.querySelectorAll('a[href], a[download]')) {
-                if (isRealGeneratedFileLink(link)) links.push(link);
-            }
-        }
-
-        return Array.from(new Set(links));
+        return Array.from(unique.values());
     }
 
-    function showDetectedPopup(displayName) {
+    function showDetectedPopup(displayNames) {
         document.getElementById('cgpt-auto-file-popup')?.remove();
 
         const popup = document.createElement('div');
         popup.id = 'cgpt-auto-file-popup';
-        popup.textContent = `${displayName} を検知しました`;
         popup.style.cssText = [
             'position:fixed',
             'left:50%',
             'top:50%',
             'transform:translate(-50%,-50%)',
             'z-index:2147483647',
-            'max-width:calc(100vw - 40px)',
-            'padding:18px 24px',
-            'border-radius:12px',
+            'width:min(620px,calc(100vw - 40px))',
+            'padding:22px 26px',
+            'border-radius:14px',
             'background:#fff',
             'color:#111',
-            'font:800 20px/1.5 system-ui,sans-serif',
+            'font:800 19px/1.6 system-ui,sans-serif',
             'text-align:center',
+            'white-space:pre-wrap',
             'word-break:break-all',
             'box-shadow:0 14px 45px rgba(0,0,0,.38)'
         ].join(';');
+        popup.textContent = `${displayNames.join('、')} を検知しました`;
 
         document.body.append(popup);
-        setTimeout(() => popup.remove(), 3000);
+        setTimeout(() => popup.remove(), POPUP_DURATION_MS);
+
+        try {
+            GM_notification({
+                title: 'ChatGPT ダウンロード完了',
+                text: `${displayNames.join('、')} を検知しました`,
+                timeout: POPUP_DURATION_MS,
+                silent: true
+            });
+        } catch (_) {
+        }
     }
 
-    function clickFileLink(link) {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const key = getFileKey(link);
+    function downloadFile(file) {
+        return new Promise((resolve, reject) => {
+            let finished = false;
+            const finish = (callback, value) => {
+                if (finished) return;
+                finished = true;
+                clearTimeout(timeoutId);
+                callback(value);
+            };
 
-                if (!document.contains(link) || knownFiles.has(key)) {
-                    queuedFiles.delete(key);
-                    resolve();
-                    return;
-                }
+            const timeoutId = setTimeout(() => {
+                finish(reject, new Error(`ダウンロード完了を確認できませんでした: ${file.fileName}`));
+            }, DOWNLOAD_TIMEOUT_MS);
 
-                try {
-                    knownFiles.add(key);
-                    queuedFiles.delete(key);
-
-                    const fileName = getDownloadName(link).slice(0, 180);
-                    const displayName = formatDetectedName(fileName);
-                    showDetectedPopup(displayName);
-
-                    link.dispatchEvent(new MouseEvent('mousedown', {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
-                    }));
-                    link.dispatchEvent(new MouseEvent('mouseup', {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
-                    }));
-                    link.click();
-                } catch (error) {
-                    knownFiles.delete(key);
-                    queuedFiles.delete(key);
-                    console.error('[ChatGPT Auto File Downloader]', error);
-                }
-
-                resolve();
-            }, DOWNLOAD_DELAY_MS);
+            try {
+                GM_download({
+                    url: file.href,
+                    name: file.fileName,
+                    saveAs: false,
+                    onload: () => finish(resolve, file.fileName),
+                    onerror: (error) => finish(reject, new Error(error?.error || `ダウンロード失敗: ${file.fileName}`)),
+                    ontimeout: () => finish(reject, new Error(`ダウンロード時間切れ: ${file.fileName}`))
+                });
+            } catch (error) {
+                finish(reject, error);
+            }
         });
     }
 
-    function queueNewFile(link) {
-        const key = getFileKey(link);
-        if (!key || knownFiles.has(key) || queuedFiles.has(key)) return;
+    async function processTurn(turn) {
+        const turnKey = getTurnKey(turn);
+        if (completedTurns.has(turnKey) || processingTurns.has(turnKey)) return;
 
-        queuedFiles.add(key);
-        downloadQueue = downloadQueue.then(() => clickFileLink(link));
+        const files = collectTurnLinks(turn);
+        if (!files.length) return;
+
+        processingTurns.add(turnKey);
+
+        try {
+            const completedNames = [];
+
+            for (const file of files) {
+                const downloadedName = await downloadFile(file);
+                completedNames.push(formatDetectedName(downloadedName));
+            }
+
+            completedTurns.add(turnKey);
+            showDetectedPopup(completedNames);
+        } catch (error) {
+            console.error(`[ChatGPT Auto File Downloader v${VERSION}]`, error);
+        } finally {
+            processingTurns.delete(turnKey);
+        }
+    }
+
+    function scheduleTurn(turn) {
+        if (!isAssistantTurn(turn)) return;
+
+        const turnKey = getTurnKey(turn);
+        if (completedTurns.has(turnKey) || processingTurns.has(turnKey)) return;
+
+        clearTimeout(settleTimers.get(turnKey));
+        settleTimers.set(turnKey, setTimeout(() => {
+            settleTimers.delete(turnKey);
+            processTurn(turn);
+        }, RESPONSE_SETTLE_MS));
     }
 
     function registerExistingFiles() {
-        for (const link of collectFileLinks(document)) {
-            knownFiles.add(getFileKey(link));
+        for (const turn of document.querySelectorAll('[data-message-author-role="assistant"], article[data-testid^="conversation-turn-"], [data-testid="conversation-turn"]')) {
+            if (!isAssistantTurn(turn)) continue;
+            const turnKey = getTurnKey(turn);
+            const files = collectTurnLinks(turn);
+            if (files.length) {
+                existingTurnFiles.set(turnKey, files.map((file) => `${file.href}|${file.fileName}`));
+                completedTurns.add(turnKey);
+            }
         }
     }
 
     const observer = new MutationObserver((mutations) => {
+        const affectedTurns = new Set();
+
         for (const mutation of mutations) {
+            const targetElement = mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
+            const targetTurn = targetElement ? getAssistantTurn(targetElement) : null;
+            if (targetTurn) affectedTurns.add(targetTurn);
+
             for (const node of mutation.addedNodes) {
                 if (!(node instanceof Element)) continue;
-                for (const link of collectFileLinks(node)) {
-                    queueNewFile(link);
-                }
-            }
 
-            if (mutation.type === 'attributes' && mutation.target instanceof HTMLAnchorElement) {
-                if (isRealGeneratedFileLink(mutation.target)) {
-                    queueNewFile(mutation.target);
+                const directTurn = node.matches('[data-message-author-role="assistant"], article[data-testid^="conversation-turn-"], [data-testid="conversation-turn"]') ? node : getAssistantTurn(node);
+                if (directTurn) affectedTurns.add(directTurn);
+
+                for (const nestedTurn of node.querySelectorAll?.('[data-message-author-role="assistant"], article[data-testid^="conversation-turn-"], [data-testid="conversation-turn"]') || []) {
+                    affectedTurns.add(nestedTurn);
                 }
             }
+        }
+
+        for (const turn of affectedTurns) {
+            scheduleTurn(turn);
         }
     });
 
@@ -219,6 +290,7 @@
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true,
+        characterData: true,
         attributes: true,
         attributeFilter: ['href', 'download']
     });
