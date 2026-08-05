@@ -1,0 +1,52 @@
+name: Tampermonkey Auto Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/**/*.user.js"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tampermonkey-auto-sync-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: ${{ !contains(github.event.head_commit.message, '[tm-auto-sync]') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pythonを準備
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: バージョン・対象URL・CHANGELOGを同期
+        env:
+          GITHUB_BEFORE: ${{ github.event.before }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python tools/sync_tampermonkey_update.py
+
+      - name: 自動変更をコミット
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "追加の自動変更はありません。"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts tools/tampermonkey-current-url.txt CHANGELOG.md
+          git commit -m "Tampermonkey更新情報を自動同期 [tm-auto-sync]"
+          git push
