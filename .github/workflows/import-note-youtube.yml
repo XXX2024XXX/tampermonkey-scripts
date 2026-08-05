@@ -1,0 +1,50 @@
+name: Import note YouTube Userscript
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "import_parts/**"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check all parts
+        id: check
+        shell: bash
+        run: |
+          ok=true
+          for n in 00 01 02 03 04 05; do
+            if [[ ! -f "import_parts/part${n}.b64" ]]; then ok=false; fi
+          done
+          echo "ready=$ok" >> "$GITHUB_OUTPUT"
+      - name: Rebuild userscript
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          mkdir -p scripts
+          cat import_parts/part00.b64 import_parts/part01.b64 import_parts/part02.b64 import_parts/part03.b64 import_parts/part04.b64 import_parts/part05.b64 | base64 -d > scripts/note-youtube-read-marker.user.js
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/note-youtube-read-marker.user.js')
+          data = p.read_bytes()
+          if not data.startswith(b'\xef\xbb\xbf'):
+              p.write_bytes(b'\xef\xbb\xbf' + data)
+          PY
+          rm -rf import_parts
+          rm -f .github/workflows/import-note-youtube.yml
+      - name: Commit rebuilt file
+        if: steps.check.outputs.ready == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add note YouTube read marker userscript"
+          git push
