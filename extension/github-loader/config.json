@@ -3,8 +3,18 @@
   "emergencyStop": false,
   "cacheHistoryLimit": 3,
   "requestTimeoutMs": 15000,
-  "generatedAt": "2026-08-05T11:22:34.503Z",
+  "generatedAt": "2026-08-05T11:27:37.348Z",
   "scripts": [
+    {
+      "id": "f5-five-step-test",
+      "name": "F5 5回更新テスト",
+      "enabled": true,
+      "sourceUrl": "https://raw.githubusercontent.com/XXX2024XXX/tampermonkey-scripts/main/scripts/f5-five-step-test.user.js",
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    },
     {
       "id": "page-title-url-copy",
       "name": "ページタイトル＋URLコピー（F8）",
