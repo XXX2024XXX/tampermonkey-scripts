@@ -1,8 +1,8 @@
 ﻿// ==UserScript==
-// @name         ChatGPT 作成ファイル検知テスト
+// @name         ChatGPT 作成ファイル自動ダウンロード
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.0.4
-// @description  ChatGPTの回答に表示されたダウンロード可能なファイルを複数の方法で検知し、OKポップアップで通知します。
+// @version      1.0.5
+// @description  ChatGPTが新しく作成したダウンロード可能なファイルだけを検知し、自動で1回だけダウンロードします。
 // @author       XXX2024XXX
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
@@ -15,240 +15,201 @@
 (function () {
     'use strict';
 
-    const VERSION = '1.0.4';
-    const SCAN_DELAY_MS = 350;
-    const PERIODIC_SCAN_MS = 1500;
-    const detected = new Set();
-    let scanTimer = null;
+    const VERSION = '1.0.5';
+    const DOWNLOAD_DELAY_MS = 900;
+    const FILE_EXTENSION_PATTERN = /\.(?:zip|7z|rar|pdf|docx?|xlsx?|xlsm|pptx?|csv|tsv|txt|md|json|xml|ya?ml|js|mjs|cjs|ts|tsx|jsx|html?|css|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bat|cmd|ps1|ahk|user\.js|png|jpe?g|webp|gif|svg|mp3|wav|m4a|mp4|webm)(?:[?#]|$)/i;
+    const EXACT_FILE_URL_PATTERN = /(?:sandbox:\/\/mnt\/data\/|\/mnt\/data\/|\/backend-api\/files\/|files\.oaiusercontent\.com\/)/i;
 
-    const FILE_EXTENSIONS = /\.(?:zip|7z|rar|pdf|docx?|xlsx?|xlsm|pptx?|csv|tsv|txt|md|json|xml|ya?ml|js|mjs|cjs|ts|tsx|jsx|html?|css|py|java|c|cpp|h|hpp|cs|go|rs|php|rb|sh|bat|cmd|ps1|ahk|user\.js|png|jpe?g|webp|gif|svg|mp3|wav|m4a|mp4|webm)(?:[?#\s]|$)/i;
-    const FILE_PATH_PATTERN = /(?:sandbox:\/\/mnt\/data\/|\/mnt\/data\/|backend-api\/files|files\.oaiusercontent\.com|\/files\/[^\s]+)/i;
-    const DOWNLOAD_WORD_PATTERN = /(?:ダウンロード|download|添付ファイル|保存する)/i;
+    const knownFiles = new Set();
+    const queuedFiles = new Set();
+    let downloadQueue = Promise.resolve();
 
-    function normalizeText(value) {
+    function normalize(value) {
         return String(value || '').replace(/\s+/g, ' ').trim();
     }
 
-    function getCandidateText(element) {
-        const values = [
-            element.getAttribute?.('href'),
-            element.href,
-            element.getAttribute?.('download'),
-            element.getAttribute?.('aria-label'),
-            element.getAttribute?.('data-testid'),
-            element.getAttribute?.('title'),
-            element.getAttribute?.('data-state'),
-            element.textContent
-        ];
-        return normalizeText(values.filter(Boolean).join(' '));
-    }
-
-    function isExcludedArea(element) {
+    function isAssistantOutput(element) {
         return Boolean(element.closest(
-            'nav, aside, header, form, textarea, [contenteditable="true"], [data-testid="composer"], #cgpt-file-detected-popup, #cgpt-file-detector-indicator'
+            '[data-message-author-role="assistant"], article[data-testid^="conversation-turn-"], [data-testid="conversation-turn"]'
         ));
     }
 
-    function isVisible(element) {
-        if (!(element instanceof Element)) return false;
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    function isExcluded(element) {
+        return Boolean(element.closest(
+            'nav, aside, header, form, textarea, [contenteditable="true"], [data-testid="composer"], #cgpt-auto-file-status'
+        ));
     }
 
-    function hasFileSignal(element) {
-        const text = getCandidateText(element);
-        if (!text) return false;
+    function getHref(element) {
+        return normalize(element.getAttribute('href') || element.href || '');
+    }
 
-        return Boolean(
-            element.hasAttribute?.('download') ||
-            FILE_EXTENSIONS.test(text) ||
-            FILE_PATH_PATTERN.test(text) ||
-            DOWNLOAD_WORD_PATTERN.test(text)
+    function getDownloadName(element) {
+        return normalize(
+            element.getAttribute('download') ||
+            element.textContent ||
+            element.getAttribute('aria-label') ||
+            'ChatGPT作成ファイル'
         );
     }
 
-    function isFileCandidate(element) {
-        if (!(element instanceof Element)) return false;
-        if (isExcludedArea(element)) return false;
-        if (!isVisible(element)) return false;
-        if (!hasFileSignal(element)) return false;
+    function isRealGeneratedFileLink(element) {
+        if (!(element instanceof HTMLAnchorElement)) return false;
+        if (!isAssistantOutput(element) || isExcluded(element)) return false;
 
-        const tag = element.tagName;
-        const role = element.getAttribute('role');
-        const clickable = tag === 'A' || tag === 'BUTTON' || role === 'link' || role === 'button' || element.hasAttribute('download');
+        const href = getHref(element);
+        const downloadName = normalize(element.getAttribute('download') || '');
+        const text = normalize(element.textContent || '');
 
-        if (clickable) return true;
+        if (!href || href.startsWith('javascript:')) return false;
 
-        const childClickable = element.querySelector?.('a[href],a[download],button,[role="link"],[role="button"]');
-        return Boolean(childClickable);
+        const exactChatGptFileUrl = EXACT_FILE_URL_PATTERN.test(href);
+        const explicitDownloadFile = Boolean(downloadName) && FILE_EXTENSION_PATTERN.test(downloadName);
+        const sandboxTextLink = /sandbox:\/\/mnt\/data\//i.test(element.getAttribute('href') || '');
+        const generatedFileWithExtension = exactChatGptFileUrl && FILE_EXTENSION_PATTERN.test(`${href} ${text} ${downloadName}`);
+
+        return exactChatGptFileUrl || explicitDownloadFile || sandboxTextLink || generatedFileWithExtension;
     }
 
-    function getBestClickable(element) {
-        if (element.matches('a[href],a[download],button,[role="link"],[role="button"]')) return element;
-        return element.querySelector('a[href],a[download],button,[role="link"],[role="button"]') || element;
+    function getFileKey(element) {
+        return `${getHref(element)}|${normalize(element.getAttribute('download') || '')}|${normalize(element.textContent || '')}`;
     }
 
-    function getCandidateKey(element) {
-        const clickable = getBestClickable(element);
-        const href = normalizeText(clickable.getAttribute?.('href') || clickable.href || '');
-        const download = normalizeText(clickable.getAttribute?.('download') || '');
-        const text = normalizeText(clickable.textContent || element.textContent || '');
-        return `${href}|${download}|${text.slice(0, 240)}`;
-    }
+    function collectFileLinks(root = document) {
+        const links = [];
 
-    function getDisplayName(element) {
-        const clickable = getBestClickable(element);
-        return normalizeText(
-            clickable.getAttribute?.('download') ||
-            clickable.textContent ||
-            clickable.getAttribute?.('aria-label') ||
-            element.textContent ||
-            'ダウンロード可能なファイル'
-        ).slice(0, 180);
-    }
-
-    function showDetectedPopup(element) {
-        document.getElementById('cgpt-file-detected-popup')?.remove();
-
-        const overlay = document.createElement('div');
-        overlay.id = 'cgpt-file-detected-popup';
-        overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.38)';
-
-        const box = document.createElement('div');
-        box.style.cssText = 'width:min(390px,calc(100vw - 36px));padding:24px;border-radius:14px;background:#fff;color:#111;font-family:system-ui,sans-serif;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.38)';
-
-        const title = document.createElement('div');
-        title.textContent = 'ファイルを検知しました';
-        title.style.cssText = 'font-size:22px;font-weight:800;margin-bottom:10px';
-
-        const detail = document.createElement('div');
-        detail.textContent = getDisplayName(element);
-        detail.style.cssText = 'font-size:14px;line-height:1.55;word-break:break-all;margin-bottom:18px';
-
-        const okButton = document.createElement('button');
-        okButton.type = 'button';
-        okButton.textContent = 'OK';
-        okButton.style.cssText = 'min-width:130px;padding:11px 24px;border:0;border-radius:9px;background:#10a37f;color:#fff;font-size:17px;font-weight:800;cursor:pointer';
-        okButton.addEventListener('click', () => overlay.remove());
-
-        box.append(title, detail, okButton);
-        overlay.append(box);
-        document.body.append(overlay);
-        okButton.focus();
-
-        try {
-            GM_notification({
-                title: 'ChatGPT ファイル検知',
-                text: 'ダウンロード可能なファイルを検知しました',
-                timeout: 3000,
-                silent: true
-            });
-        } catch (_) {
+        if (root instanceof HTMLAnchorElement && isRealGeneratedFileLink(root)) {
+            links.push(root);
         }
+
+        if (root.querySelectorAll) {
+            for (const link of root.querySelectorAll('a[href], a[download]')) {
+                if (isRealGeneratedFileLink(link)) links.push(link);
+            }
+        }
+
+        return Array.from(new Set(links));
     }
 
-    function collectCandidates() {
-        const selector = [
-            'a[href]',
-            'a[download]',
-            'button',
-            '[role="link"]',
-            '[role="button"]',
-            '[data-testid*="download" i]',
-            '[aria-label*="ダウンロード"]',
-            '[aria-label*="download" i]',
-            '[title*="ダウンロード"]',
-            '[title*="download" i]'
-        ].join(',');
+    function showStatus(text, success = true) {
+        let status = document.getElementById('cgpt-auto-file-status');
+        if (!status) {
+            status = document.createElement('div');
+            status.id = 'cgpt-auto-file-status';
+            status.style.cssText = [
+                'position:fixed',
+                'right:14px',
+                'bottom:14px',
+                'z-index:2147483647',
+                'max-width:360px',
+                'padding:10px 14px',
+                'border-radius:10px',
+                'color:#fff',
+                'font:700 13px system-ui,sans-serif',
+                'box-shadow:0 5px 18px rgba(0,0,0,.3)',
+                'transition:opacity .2s ease'
+            ].join(';');
+            document.body.append(status);
+        }
 
-        const direct = Array.from(document.querySelectorAll(selector));
-        const textMatches = Array.from(document.querySelectorAll('main *')).filter((element) => {
-            if (element.children.length > 4) return false;
-            return hasFileSignal(element);
+        status.textContent = `${text} v${VERSION}`;
+        status.style.background = success ? '#107c41' : '#8b1e1e';
+        status.style.opacity = '1';
+        clearTimeout(status._hideTimer);
+        status._hideTimer = setTimeout(() => {
+            status.style.opacity = '0';
+        }, 3500);
+    }
+
+    function clickFileLink(link) {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                const key = getFileKey(link);
+
+                if (!document.contains(link) || knownFiles.has(key)) {
+                    queuedFiles.delete(key);
+                    resolve();
+                    return;
+                }
+
+                try {
+                    knownFiles.add(key);
+                    queuedFiles.delete(key);
+
+                    link.dispatchEvent(new MouseEvent('mousedown', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    }));
+                    link.dispatchEvent(new MouseEvent('mouseup', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    }));
+                    link.click();
+
+                    const fileName = getDownloadName(link).slice(0, 120);
+                    showStatus(`自動ダウンロード：${fileName}`);
+
+                    try {
+                        GM_notification({
+                            title: 'ChatGPT 自動ダウンロード',
+                            text: `${fileName} を検知してダウンロードしました`,
+                            timeout: 3000,
+                            silent: true
+                        });
+                    } catch (_) {
+                    }
+                } catch (error) {
+                    knownFiles.delete(key);
+                    queuedFiles.delete(key);
+                    showStatus('ダウンロードに失敗しました', false);
+                    console.error('[ChatGPT Auto File Downloader]', error);
+                }
+
+                resolve();
+            }, DOWNLOAD_DELAY_MS);
         });
-
-        return Array.from(new Set([...direct, ...textMatches]));
     }
 
-    function scan(force = false) {
-        const candidates = collectCandidates();
-        let found = false;
+    function queueNewFile(link) {
+        const key = getFileKey(link);
+        if (!key || knownFiles.has(key) || queuedFiles.has(key)) return;
 
-        for (const candidate of candidates) {
-            if (!isFileCandidate(candidate)) continue;
+        queuedFiles.add(key);
+        downloadQueue = downloadQueue.then(() => clickFileLink(link));
+    }
 
-            const key = getCandidateKey(candidate);
-            if (!force && detected.has(key)) continue;
-
-            detected.add(key);
-            showDetectedPopup(candidate);
-            setIndicator('検知：OK', true);
-            found = true;
-            break;
+    function registerExistingFiles() {
+        for (const link of collectFileLinks(document)) {
+            knownFiles.add(getFileKey(link));
         }
+        showStatus('新しい作成ファイルを待機中');
+    }
 
-        if (!found && force) {
-            setIndicator('未検知', false);
-            showMiniMessage('ファイルは見つかりませんでした');
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (!(node instanceof Element)) continue;
+                for (const link of collectFileLinks(node)) {
+                    queueNewFile(link);
+                }
+            }
+
+            if (mutation.type === 'attributes' && mutation.target instanceof HTMLAnchorElement) {
+                if (isRealGeneratedFileLink(mutation.target)) {
+                    queueNewFile(mutation.target);
+                }
+            }
         }
-    }
-
-    function scheduleScan() {
-        clearTimeout(scanTimer);
-        scanTimer = setTimeout(() => scan(false), SCAN_DELAY_MS);
-    }
-
-    function setIndicator(text, success = false) {
-        const indicator = document.getElementById('cgpt-file-detector-indicator');
-        if (!indicator) return;
-        indicator.textContent = `${text} v${VERSION}`;
-        indicator.style.background = success ? '#107c41' : '#555';
-    }
-
-    function showMiniMessage(text) {
-        let message = document.getElementById('cgpt-file-detector-message');
-        if (!message) {
-            message = document.createElement('div');
-            message.id = 'cgpt-file-detector-message';
-            message.style.cssText = 'position:fixed;right:14px;bottom:58px;z-index:2147483646;padding:9px 12px;border-radius:8px;background:#222;color:#fff;font:13px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.3)';
-            document.body.append(message);
-        }
-        message.textContent = text;
-        clearTimeout(message._timer);
-        message._timer = setTimeout(() => message.remove(), 2500);
-    }
-
-    function createIndicator() {
-        if (document.getElementById('cgpt-file-detector-indicator')) return;
-
-        const indicator = document.createElement('button');
-        indicator.id = 'cgpt-file-detector-indicator';
-        indicator.type = 'button';
-        indicator.textContent = `検知待機中 v${VERSION}`;
-        indicator.title = '押すと現在の画面を強制的に再検査します';
-        indicator.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147483646;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3);color:#fff;background:#555';
-        indicator.addEventListener('click', () => {
-            setIndicator('再検査中');
-            scan(true);
-        });
-
-        document.body.append(indicator);
-    }
-
-    const observer = new MutationObserver(() => {
-        createIndicator();
-        scheduleScan();
     });
 
-    createIndicator();
+    registerExistingFiles();
+
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['href', 'download', 'aria-label', 'title', 'data-testid']
+        attributeFilter: ['href', 'download']
     });
-
-    scheduleScan();
-    setInterval(() => scan(false), PERIODIC_SCAN_MS);
 })();
