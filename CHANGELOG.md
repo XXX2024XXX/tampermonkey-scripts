@@ -3,6 +3,9 @@
 Tampermonkeyスクリプトの更新履歴です。
 
 <!-- AUTO-CHANGELOG: 自動更新はこの行の下へ追加されます -->
+## 2026-08-05 23:49 JST
+- `scripts/chatgpt-auto-prompt-runner.user.js`: 新規登録 `3.1.0`
+
 ## 2026-08-05 22:30 JST
 - `scripts/f5-five-step-test.user.js`: `1.2` → `1.3`
 
