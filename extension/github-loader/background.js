@@ -54,7 +54,8 @@ function validateConfig(config) {
 async function loadConfig() {
     try {
         const text = await fetchText(CONFIG_URL, DEFAULT_TIMEOUT_MS);
-        const config = validateConfig(JSON.parse(text));
+        const normalizedText = text.replace(/^\uFEFF/, '');
+        const config = validateConfig(JSON.parse(normalizedText));
         await chrome.storage.local.set({ [CONFIG_CACHE_KEY]: config });
         return { config, source: 'GitHub最新版' };
     } catch (error) {
