@@ -1,7 +1,19 @@
-{
+﻿{
   "schemaVersion": 1,
   "emergencyStop": false,
   "cacheHistoryLimit": 3,
   "requestTimeoutMs": 15000,
-  "scripts": []
+  "generatedAt": "2026-08-05T10:57:35.546Z",
+  "scripts": [
+    {
+      "id": "ok-test",
+      "name": "OK表示テスト",
+      "enabled": true,
+      "sourceUrl": "https://raw.githubusercontent.com/XXX2024XXX/tampermonkey-scripts/main/scripts/ok-test.user.js",
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    }
+  ]
 }
