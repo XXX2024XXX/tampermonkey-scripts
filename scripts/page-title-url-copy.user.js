@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         ページタイトル＋URLコピー（F8）
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.1
+// @version      1.2
 // @description  F8キーまたは画面ボタンで現在のページタイトルとURLをクリップボードへコピーし、結果を表示します。
 // @loader-enabled true
 // @match        http://*/*
