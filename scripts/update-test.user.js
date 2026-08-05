@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         2
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.2
+// @version      1.3
 // @description  Tampermonkeyの1クリック更新を10回確認するテスト用スクリプト
 // @author       XXX2024XXX
 // @match        https://example.com/*
