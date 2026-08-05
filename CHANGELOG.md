@@ -3,6 +3,9 @@
 Tampermonkeyスクリプトの更新履歴です。
 
 <!-- AUTO-CHANGELOG: 自動更新はこの行の下へ追加されます -->
+## 2026-08-06 01:04 JST
+- `scripts/chatgpt-auto-file-downloader.user.js`: `1.0.2` → `1.0.3`
+
 ## 2026-08-06 00:59 JST
 - `scripts/chatgpt-auto-file-downloader.user.js`: `1.0.0` → `1.0.1`
 

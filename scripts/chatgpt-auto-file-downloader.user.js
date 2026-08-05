@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         ChatGPT 作成ファイル検知テスト
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.0.2
+// @version      1.0.3
 // @description  ChatGPTの回答に表示されたダウンロード可能なファイルを検知し、OKポップアップで通知します。
 // @author       XXX2024XXX
 // @match        https://chatgpt.com/*
