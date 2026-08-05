@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Tampermonkey コピペ不要マネージャー
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.0
+// @version      1.1
 // @description  GitHubに追加された新しいユーザースクリプトを通知し、コードを貼り付けずにTampermonkeyのインストール画面を開きます。
 // @author       You
 // @match        http://*/*

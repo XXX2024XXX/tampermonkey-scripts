@@ -3,6 +3,9 @@
 Tampermonkeyスクリプトの更新履歴です。
 
 <!-- AUTO-CHANGELOG: 自動更新はこの行の下へ追加されます -->
+## 2026-08-05 20:35 JST
+- `scripts/tampermonkey-copyless-manager.user.js`: `1.0` → `1.1`
+
 ## 2026-08-05 20:12 JST
 - `scripts/page-title-url-copy.user.js`: `1.1` → `1.2`
 
