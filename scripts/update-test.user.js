@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
-// @name         2
+// @name         3
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.3
+// @version      1.4
 // @description  Tampermonkeyの1クリック更新を10回確認するテスト用スクリプト
 // @author       XXX2024XXX
 // @match        https://example.com/*
@@ -18,7 +18,7 @@
 
     const panel = document.createElement('div');
     panel.id = 'tm-update-test-panel';
-    panel.textContent = 'Tampermonkey更新テスト：2回目';
+    panel.textContent = 'Tampermonkey更新テスト：3回目';
     Object.assign(panel.style, {
         position: 'fixed',
         top: '20px',
