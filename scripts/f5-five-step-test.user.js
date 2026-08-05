@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         F5 5回更新テスト
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.1
+// @version      1.2
 // @description  同じページでF5するたびに1から5まで増える数字を表示し、Tampermonkeyへの自動反映を確認します。
 // @loader-enabled true
 // @match        http://*/*
@@ -47,7 +47,7 @@
     ].join(';');
 
     const title = document.createElement('div');
-    title.textContent = 'F5 更新テスト v1.1';
+    title.textContent = 'F5 更新テスト v1.2';
     title.style.cssText = 'font-size:16px;font-weight:900;margin-bottom:6px';
 
     const number = document.createElement('div');
