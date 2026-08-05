@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "GitHubユーザースクリプトローダー",
+  "version": "1.0.0",
+  "description": "GitHubで管理するユーザースクリプトを取得し、対象ページで最新版または前回正常版を実行します。",
+  "minimum_chrome_version": "135",
+  "permissions": [
+    "storage",
+    "userScripts",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
