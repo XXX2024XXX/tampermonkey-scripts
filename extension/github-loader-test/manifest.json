@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "GitHub自動読込テスト",
-  "version": "1.0.0",
-  "description": "GitHub上のユーザースクリプトを取得し、ページ更新時に最新版を実行するテスト用拡張機能です。",
+  "version": "1.0.1",
+  "description": "GitHub上のユーザースクリプトを取得し、ページ更新時または手動テストで最新版を実行するテスト用拡張機能です。",
   "minimum_chrome_version": "135",
   "permissions": [
+    "activeTab",
     "storage",
     "userScripts",
     "webNavigation"
