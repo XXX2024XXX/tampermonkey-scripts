@@ -3,6 +3,11 @@
 Tampermonkeyスクリプトの更新履歴です。
 
 <!-- AUTO-CHANGELOG: 自動更新はこの行の下へ追加されます -->
+## 2026-08-05 23:58 JST
+- `scripts/chatgpt-auto-prompt-runner.user.js`: `3.1.0` → `3.2.0`
+- 回答終了の検知と次プロンプト入力を改善
+- 画面タイトルへバージョン表示を追加
+
 ## 2026-08-05 23:49 JST
 - `scripts/chatgpt-auto-prompt-runner.user.js`: 新規登録 `3.1.0`
 
