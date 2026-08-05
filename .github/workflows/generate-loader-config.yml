@@ -1,0 +1,40 @@
+name: Generate Loader Config
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/**/*.user.js'
+      - 'tools/generate-loader-config.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate config
+        run: node tools/generate-loader-config.mjs
+
+      - name: Commit generated config
+        run: |
+          if git diff --quiet -- extension/github-loader/config.json; then
+            echo "変更なし"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add extension/github-loader/config.json
+          git commit -m "chore: update GitHub loader config"
+          git push
