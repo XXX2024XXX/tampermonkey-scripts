@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         OK表示テスト
 // @namespace    https://github.com/XXX2024XXX/tampermonkey-scripts
-// @version      1.4
+// @version      1.5
 // @description  GitHub更新とTampermonkey自動更新の確認用に、画面右上へ更新テスト結果を表示します。
 // @match        http://*/*
 // @match        https://*/*
