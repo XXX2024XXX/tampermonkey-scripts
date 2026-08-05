@@ -1,0 +1,87 @@
+name: Tampermonkey Auto Update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/*.user.js"
+      - "scripts/**/*.user.js"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tampermonkey-auto-update-main
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Detect target scripts
+        id: targets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            find scripts -type f -name '*.user.js' -print0 | sort -z > /tmp/targets.bin
+          else
+            git diff --name-only -z HEAD^ HEAD -- 'scripts/*.user.js' 'scripts/**/*.user.js' > /tmp/targets.bin
+          fi
+
+          python - <<'PY'
+          from pathlib import Path
+
+          raw = Path('/tmp/targets.bin').read_bytes()
+          paths = [item.decode('utf-8') for item in raw.split(b'\0') if item]
+          Path('/tmp/targets.txt').write_text('\n'.join(paths), encoding='utf-8')
+          print(f'対象: {len(paths)}件')
+          for path in paths:
+              print(path)
+          PY
+
+          if [[ -s /tmp/targets.txt ]]; then
+            echo "has_targets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_targets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update version, URLs and changelog
+        if: steps.targets.outputs.has_targets == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < /tmp/targets.txt
+          python tools/update_tampermonkey.py "${files[@]}"
+
+      - name: Commit automatic updates
+        if: steps.targets.outputs.has_targets == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts CHANGELOG.md
+
+          if git diff --cached --quiet; then
+            echo "コミットする変更はありません。"
+            exit 0
+          fi
+
+          git commit -m "chore: auto-update Tampermonkey versions and changelog"
+          git push
