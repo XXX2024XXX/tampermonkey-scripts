@@ -3,6 +3,9 @@
 Tampermonkeyスクリプトの更新履歴です。
 
 <!-- AUTO-CHANGELOG: 自動更新はこの行の下へ追加されます -->
+## 2026-08-05 18:31 JST
+- `scripts/update-test.user.js`: `1.4` → `1.5`
+
 ## 2026-08-05 18:15 JST
 - `scripts/update-test.user.js`: `1.2` → `1.3`
 
