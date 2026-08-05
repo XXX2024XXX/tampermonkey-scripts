@@ -35,4 +35,5 @@
 
     document.documentElement.appendChild(notice);
     console.log(`[Sample Userscript] version ${version}`);
+    console.log('[Sample Userscript] automatic update test started: 2026-08-05');
 })();
